@@ -1,0 +1,74 @@
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: 'Build ${{ matrix.os }}'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, macos-13] #, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Pascal (Linux)
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update
+          sudo apt-get install -y fpc
+
+      - name: Setup Pascal (Osx)
+        if: ${{ runner.os == 'macOS' }}
+        run: |
+          brew install fpc
+
+      #- name: Setup Pascal (Windows)
+      #  if: ${{ runner.os == 'Windows' }}
+      #  run: |
+      #    choco install lazarus
+
+      - name: Build
+        if: ${{ runner.os != 'Windows' }}
+        run: |
+          mkdir target
+          fpc -otarget/helloworld src/helloworld.pas
+
+      #- name: Build
+      #  if: ${{ runner.os == 'Windows' }}
+      #  run: |
+      #    mkdir target
+      #    fpc.exe -otarget\helloworld.exe src\helloworld.pas
+          
+      - name: Assemble
+        uses: jreleaser/release-action@v2
+        with:
+          arguments: assemble
+        env:
+          JRELEASER_PROJECT_VERSION: ${{ inputs.version }}
+          JRELEASER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: JReleaser output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jreleaser-assemble-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            out/jreleaser/trace.log
+            out/jreleaser/output.properties
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          retention-days: 1
+          name: artifact-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            out/jreleaser/assemble/helloworld/archive/*.zip
